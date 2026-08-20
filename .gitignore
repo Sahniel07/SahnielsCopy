@@ -1,0 +1,6 @@
+# Build output
+build/
+build_*/
+
+# Third-party libraries (fetch separately)
+thirdparty/

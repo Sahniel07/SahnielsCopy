@@ -1,8 +1,6 @@
 #include "dynamic_game_planner.h"
 //#include "recorder.h"
 // #include "update_trajetcory_interface.h"
-#include "integrate_ispc.h"
-#include "ispc_parameter.h"
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -140,37 +138,37 @@ void DynamicGamePlanner::integrate(SoA_X* X_, const SoA_U* U_)
         t = 0.0;
 
         // Initial state:
-        s_t0[x] = traffic[i].x;
-        s_t0[y] = traffic[i].y;
-        s_t0[v] = traffic[i].v;
-        s_t0[psi] = traffic[i].psi;
+        s_t0[x] = traffic[i].x / param.L_Max;
+        s_t0[y] = traffic[i].y / param.L_Max;
+        s_t0[v] = traffic[i].v / param.V_Max;
+        s_t0[psi] = traffic[i].psi / param.ang_norm;
         s_t0[s] = 0.0;
         s_t0[l] = 0.0;
 
         for (int j = 0; j < param.N + 1; j++){
             index = MAX_OBSTACLES * j +  i;
-            v_ref = traffic[i].v_target;
+            v_ref = traffic[i].v_target / param.V_Max;
 
-            u_t0[d] = U_->d[index];
-            u_t0[F] = U_->F[index];
+            u_t0[d] = U_->d[index] / param.ang_norm;
+            u_t0[F] = U_->F[index] * param.L_Max / (param.V_Max * param.V_Max * param.M_norm);
 
             // Derivatives: 
-            typeInC angle_1 = param.cg_ratio * u_t0[d];
+            typeInC angle_1(param.cg_ratio * u_t0[d]);
             typeInC angle = s_t0[psi] + angle_1;
-            ds_t0[x] = s_t0[v] * cos(angle);
-            ds_t0[y] = s_t0[v] * sin(angle);
-            ds_t0[v] = (-1.0/param.tau) * s_t0[v] + (param.k) * u_t0[F];
-            ds_t0[psi] = s_t0[v] * tan(u_t0[d]) * cos(angle_1)/ param.length;
-            ds_t0[l] = param.weight_target_speed * (s_t0[v] - v_ref) * (s_t0[v] - v_ref);
+            ds_t0[x] = s_t0[v] * cos(angle * param.ang_norm);
+            ds_t0[y] = s_t0[v] * sin(angle * param.ang_norm);
+            ds_t0[v] = (-1.0/param.tau) * (param.tau_norm) * s_t0[v] + (param.k * param.k_norm) * u_t0[F];
+            ds_t0[psi] = s_t0[v] * tan(u_t0[d] * param.ang_norm) * cos(angle_1 * param.ang_norm)/ (param.length * param.length_norm * param.ang_norm);
+            ds_t0[l] = param.weight_target_speed * param.weight_target_speed_norm * (s_t0[v] - v_ref) * (s_t0[v] - v_ref);
             ds_t0[s] = s_t0[v];
 
             // Integration to compute the new state: 
-            s_t0[x] += param.dt * ds_t0[x];
-            s_t0[y] += param.dt * ds_t0[y];
-            s_t0[v] += param.dt * ds_t0[v];
-            s_t0[psi] += param.dt * ds_t0[psi];
-            s_t0[s] += param.dt * ds_t0[s];
-            s_t0[l] += param.dt * ds_t0[l];
+            s_t0[x] += param.dt * param.dt_norm * ds_t0[x];
+            s_t0[y] += param.dt * param.dt_norm * ds_t0[y];
+            s_t0[v] += param.dt * param.dt_norm * ds_t0[v];
+            s_t0[psi] += param.dt * param.dt_norm * ds_t0[psi];
+            s_t0[s] += param.dt * param.dt_norm * ds_t0[s];
+            s_t0[l] += param.dt * param.dt_norm * ds_t0[l];
 
             if (s_t0[v] < 0.0){s_t0[v] = 0.0;}
 
@@ -181,7 +179,7 @@ void DynamicGamePlanner::integrate(SoA_X* X_, const SoA_U* U_)
             X_->psi[index] = s_t0[psi];
             X_->s[index] = s_t0[s];
             X_->l[index] = s_t0[l];
-            t+= param.dt;    
+            t+= param.dt * param.dt_norm;    
         }
     }
 }
@@ -629,6 +627,7 @@ TrafficParticipants DynamicGamePlanner::set_prediction(const double* X_, const d
             point.omega = point.v * tan(input.delta) * cos(param.cg_ratio * input.delta)/ param.length;
             point.beta = 0.5 * input.delta;
             point.l = X_[ nx * i + param.nX * j + l];
+            point.s = X_[ nx * i + param.nX * j + s]; 
             point.t_start = time;
             point.t_end = time + param.dt;
             trajectory.push_back(point);
@@ -907,27 +906,30 @@ void DynamicGamePlanner::convertFromISPC(const SoA_X* X_, SoA_X_Double* X_Double
 {
     for(int i=0; i<NUM_State*MAX_OBSTACLES; i++)
     {
-        X_Double->x[i] = (double)(X_->x[i]) * L_Max_Double;
-        X_Double->y[i] = (double)(X_->y[i]) * L_Max_Double;
-        X_Double->psi[i] = (double)(X_->psi[i]) * 2.0f * M_PI;
-        X_Double->v[i] = (double)(X_->v[i]) * V_Max_Double;
-        X_Double->s[i] = (double)(X_->s[i]) * L_Max_Double;
-        X_Double->l[i] = (double)(X_->l[i]) * C_Max_Double;
+        X_Double->x[i] = (double)(X_->x[i]) * param.L_Max;
+        X_Double->y[i] = (double)(X_->y[i]) * param.L_Max;
+        X_Double->psi[i] = (double)(X_->psi[i]) * param.ang_norm;
+        X_Double->v[i] = (double)(X_->v[i]) * param.V_Max;
+        X_Double->s[i] = (double)(X_->s[i]) * param.L_Max;
+        X_Double->l[i] = (double)(X_->l[i]) * param.C_Max;
     }
 }
 
-void DynamicGamePlanner::convertFromISPC_WithoutQuantization(const SoA_X* X_, SoA_X_Double* X_Double)
-{
-    for(int i=0; i<NUM_State*MAX_OBSTACLES; i++)
-    {
-        X_Double->x[i] = (double)(X_->x[i]);
-        X_Double->y[i] = (double)(X_->y[i]);
-        X_Double->psi[i] = (double)(X_->psi[i]);
-        X_Double->v[i] = (double)(X_->v[i]);
-        X_Double->s[i] = (double)(X_->s[i]);
-        X_Double->l[i] = (double)(X_->l[i]);
-    }
-}
+// Superseded by convertFromISPC: with the scale factors gated in parameters.h,
+// ENABLE_QUANTIZATION=0 sets L_Max/V_Max/C_Max/ang_norm to 1.0, so multiplying
+// by them is a bit-exact no-op and convertFromISPC covers both modes.
+// void DynamicGamePlanner::convertFromISPC_WithoutQuantization(const SoA_X* X_, SoA_X_Double* X_Double)
+// {
+//     for(int i=0; i<NUM_State*MAX_OBSTACLES; i++)
+//     {
+//         X_Double->x[i] = (double)(X_->x[i]);
+//         X_Double->y[i] = (double)(X_->y[i]);
+//         X_Double->psi[i] = (double)(X_->psi[i]);
+//         X_Double->v[i] = (double)(X_->v[i]);
+//         X_Double->s[i] = (double)(X_->s[i]);
+//         X_Double->l[i] = (double)(X_->l[i]);
+//     }
+// }
 
 void DynamicGamePlanner::launch_integrate(SoA_X_Double* X_Double, const SoA_U_Double* U_Double)
 {
@@ -936,14 +938,10 @@ void DynamicGamePlanner::launch_integrate(SoA_X_Double* X_Double, const SoA_U_Do
     
     auto start = std::chrono::steady_clock::now();
     convertToISPC(U_Double, X_Double, &U_, &X_);
-    integrate_ispc(&X_, &U_, state_ispc, M);
-    // integrate(&X_, &U_); //this is the scalar version
+    // integrate_ispc(&X_, &U_, state_ispc, M);
+    integrate(&X_, &U_); //this is the scalar version
         
-    #if ENABLE_QUANTIZATION == 1
     convertFromISPC(&X_, X_Double);
-    #else
-    convertFromISPC_WithoutQuantization(&X_, X_Double);
-    #endif
     auto end = std::chrono::steady_clock::now();
 
     sum_time_integration += end - start;

@@ -9,29 +9,70 @@
 #include "vehicle_state.h"
 #include "utils.h"  // Utility functions
 #include "parameters.h"  // Parameters for the planner
-#include "integrate_ispc.h"
 //#include "recorder.h"
 
-#if ARCH_AARCH64
-#include <arm_fp16.h>
+#if USE_POSIT
+#include <universal/number/posit/posit.hpp>
+#elif REAL_BITS == 16
+#include <universal/number/cfloat/cfloat.hpp>
 #endif
-
-using namespace ispc;
 
 #define MAX_OBSTACLES 20
 #define NUM_State 21
 
-#if REAL_BITS == 16
-typedef __fp16 typeInC;
+/** Working type of the integrator: the format under study */
+#if USE_POSIT
+typedef sw::universal::posit<REAL_BITS, POSIT_ES> typeInC;
+#elif REAL_BITS == 16
+typedef sw::universal::half typeInC;
 #elif REAL_BITS == 32
 typedef float typeInC;
 #else
 typedef double typeInC;
 #endif
+
+/** State and input containers in the working type */
+struct SoA_X {
+    typeInC x[NUM_State * MAX_OBSTACLES];
+    typeInC y[NUM_State * MAX_OBSTACLES];
+    typeInC psi[NUM_State * MAX_OBSTACLES];
+    typeInC v[NUM_State * MAX_OBSTACLES];
+    typeInC s[NUM_State * MAX_OBSTACLES];
+    typeInC l[NUM_State * MAX_OBSTACLES];
+};
+
+struct SoA_U {
+    typeInC d[NUM_State * MAX_OBSTACLES];
+    typeInC F[NUM_State * MAX_OBSTACLES];
+};
+
+/* The optimizer always works in binary64. */
+struct SoA_X_Double {
+    double x[NUM_State * MAX_OBSTACLES];
+    double y[NUM_State * MAX_OBSTACLES];
+    double psi[NUM_State * MAX_OBSTACLES];
+    double v[NUM_State * MAX_OBSTACLES];
+    double s[NUM_State * MAX_OBSTACLES];
+    double l[NUM_State * MAX_OBSTACLES];
+};
+
+struct SoA_U_Double {
+    double d[NUM_State * MAX_OBSTACLES];
+    double F[NUM_State * MAX_OBSTACLES];
+};
+
+struct State_ISPC {
+    typeInC x[MAX_OBSTACLES];
+    typeInC y[MAX_OBSTACLES];
+    typeInC v[MAX_OBSTACLES];
+    typeInC psi[MAX_OBSTACLES];
+    typeInC v_target[MAX_OBSTACLES];
+};
+
 class DynamicGamePlanner {
 public:
-    static constexpr int nx = Parameters::nX * (Parameters::N + 1);                          /** size of the state trajectory X_i for each vehicle */
-    static const int nu = Parameters::nU * (Parameters::N + 1);                                 /** size of the input trajectory U_i for each vehicle */
+    static constexpr int nx = Parameters::nX * (Parameters::N + 1);     /** size of the state trajectory X_i for each vehicle */
+    static const int nu = Parameters::nU * (Parameters::N + 1);         /** size of the input trajectory U_i for each vehicle */
     int M;                                                              /** number of agents */ 
     int nC;                                                             /** total number of inequality constraints */
     int nC_i;                                                           /** inequality constraints for one vehicle */
@@ -112,7 +153,7 @@ public:
     void launch_integrate(SoA_X_Double* X_, const SoA_U_Double* U_);
     void convertToISPC(const SoA_U_Double* U_Double, const SoA_X_Double* X_Double, SoA_U* U_, SoA_X* X_);
     void convertFromISPC(const SoA_X* X_, SoA_X_Double* X_Double);
-    void convertFromISPC_WithoutQuantization(const SoA_X* X_, SoA_X_Double* X_Double);
+    // void convertFromISPC_WithoutQuantization(const SoA_X* X_, SoA_X_Double* X_Double);
     inline size_t getRuntimeForIntegrate_ms() { return std::chrono::duration_cast<std::chrono::milliseconds>(sum_time_integration).count(); }
 };
 #endif // DYNAMIC_GAME_PLANNER_H

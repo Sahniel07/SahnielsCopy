@@ -5,10 +5,6 @@
 #include "dynamic_game_planner.h"
 //#include "recorder.h"
 
-#if (REAL_BITS == 16) && !(ARCH_AARCH64)
-#error "REAL_BITS=16 requires ENABLE_AARCH64=ON, cant compile 16 Bit for X86!"
-#endif
-
 #if (ENABLE_QUANTIZATION == 1)
     std::string quantization_status = "_withQuanti";
 #else
@@ -62,7 +58,7 @@ void save_trajectories_to_csv(const std::vector<VehicleState>& traffic, const st
     for (size_t i = 0; i < traffic.size(); i++) {
         file << i << "," << traffic[i].x << "," << traffic[i].y << "," << traffic[i].psi << "," << 0 << "," << 0 << 0 << "\n";
         for (const auto& point : traffic[i].predicted_trajectory) {
-            file << i << "," << point.x << "," << point.y << "," << point.psi << "," << point.s << "," << point.l << point.t_start << "\n";
+            file << i << "," << point.x << "," << point.y << "," << point.psi << "," << point.s << "," << point.l << "," << point.t_start << "\n";
         }
     }
 
