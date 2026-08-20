@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -61,7 +62,20 @@ CONFIGS = [
 
 def load_intersection_data(suffix: str) -> pd.DataFrame:
     """Return the intersection trajectory dataframe for the requested suffix."""
-    return pd.read_csv(f"trajectories_intersection{suffix}.csv")
+    repo_root = Path(__file__).resolve().parent
+    build_dir = repo_root / "build"
+    candidates = [
+        Path.cwd() / f"trajectories_intersection{suffix}.csv",
+        build_dir / f"trajectories_intersection{suffix}.csv",
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return pd.read_csv(path)
+
+    raise FileNotFoundError(
+        f"Could not find trajectories file for suffix {suffix}. Searched: {', '.join(str(p) for p in candidates)}"
+    )
 
 # Function to plot trajectories
 def plot_trajectories(df, scenario_name, ax):
