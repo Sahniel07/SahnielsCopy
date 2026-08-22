@@ -1,7 +1,9 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <chrono> 
+#include <chrono>
+#include <cstdlib>
+#include <cstdio>
 #include "dynamic_game_planner.h"
 //#include "recorder.h"
 
@@ -9,6 +11,13 @@
     std::string quantization_status = "_withQuanti";
 #else
     std::string quantization_status = "_withoutQuanti";
+#endif
+
+/** Identifies the arithmetic format in output filenames */
+#if USE_POSIT
+    std::string format_tag = "posit" + std::to_string(REAL_BITS) + "es" + std::to_string(POSIT_ES);
+#else
+    std::string format_tag = std::to_string(REAL_BITS);
 #endif
 
 void save_lanes_to_csv(const std::vector<VehicleState>& traffic, const std::string& filename) {
@@ -143,9 +152,21 @@ int main() {
     traffic_intersection = planner_intersection.traffic;
 
     // Save trajectories to a CSV file
-    std::string output_filename = "trajectories_intersection_" + std::to_string(REAL_BITS) + quantization_status + ".csv";
+    std::string output_filename = "trajectories_intersection_" + format_tag + quantization_status + ".csv";
     save_trajectories_to_csv(traffic_intersection, output_filename);
-    save_lanes_to_csv(traffic_intersection, "lanes_intersection_" + std::to_string(REAL_BITS) + quantization_status + ".csv");
-    
+    save_lanes_to_csv(traffic_intersection, "lanes_intersection_" + format_tag + quantization_status + ".csv");
+
+    // Plot this run into media/ (run from build/, so the script is one level up)
+    char eps_str[32];
+    std::snprintf(eps_str, sizeof(eps_str), "%g", planner_intersection.param.eps);
+    std::string plot_cmd = "python3 ../plot_run.py \"" + output_filename + "\""
+                         + " --eps " + eps_str;
+#if USE_POSIT
+    plot_cmd += " --es " + std::to_string(POSIT_ES);
+#endif
+    if (std::system(plot_cmd.c_str()) != 0) {
+        std::cerr << "Warning: plotting failed (" << plot_cmd << ")" << std::endl;
+    }
+
     return 0;
 }

@@ -18,7 +18,7 @@ struct Parameters
     const double eps = 3.3e-4;
     #elif REAL_BITS == 16
     const double eps = 3.1e-2;
-    #endif 
+    #endif
 
     const double length = 5.0;
     const double cg_ratio = 0.5;
